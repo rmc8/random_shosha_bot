@@ -1,0 +1,26 @@
+{
+  "name": "random-shosha-bot",
+  "version": "1.0.0",
+  "description": "Random Shosha Bot - Auto-posting bot for X and Bluesky",
+  "main": "src/main.ts",
+  "scripts": {
+    "build": "tsc",
+    "push": "npm run build && clasp push --force",
+    "pull": "clasp pull",
+    "open": "clasp open",
+    "logs": "clasp logs",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "gas",
+    "twitter",
+    "bluesky",
+    "bot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/google-apps-script": "^1.0.83",
+    "typescript": "^5.7.2"
+  }
+}

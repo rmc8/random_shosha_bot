@@ -74,17 +74,31 @@ const blueskyHandle = properties.getProperty('BSKY_HANDLE');
 
 GASのトリガーから呼び出される関数は、グローバルスコープに配置する必要があります。
 
-**利用可能な関数:**
-- `postToXJapanese()` - 日本語文章をX日本語アカウントに投稿
-- `postToXEnglish()` - 英語文章をX英語アカウントに投稿
-- `postToBlueskyJapanese()` - 日本語文章をBlueskyに投稿
-- `postToBlueskyEnglish()` - 英語文章をBlueskyに投稿
+**利用可能な関数（6つ）:**
+
+**個別投稿関数（プラットフォーム別）:**
+- `postToXJapanese()` - 日本語文章をX日本語アカウントのみに投稿
+- `postToXEnglish()` - 英語文章をX英語アカウントのみに投稿
+- `postToBlueskyJapanese()` - 日本語文章をBlueskyのみに投稿
+- `postToBlueskyEnglish()` - 英語文章をBlueskyのみに投稿
+
+**同時投稿関数（言語別）:**
+- `postJapanese()` - 日本語文章をXとBlueskyの両方に投稿
+- `postEnglish()` - 英語文章をXとBlueskyの両方に投稿
 
 トリガーは、GASのスクリプトエディタで「トリガー」から設定します。
 
 **トリガー設定例:**
-- 日本語投稿: 毎日 JST 5:00 に `postToXJapanese()` と `postToBlueskyJapanese()`
-- 英語投稿: 毎日 JST 18:00 に `postToXEnglish()` と `postToBlueskyEnglish()`
+
+**パターンA: 同時投稿（シンプル）**
+- 毎日 JST 5:00: `postJapanese()` → XとBlusky両方に日本語投稿
+- 毎日 JST 18:00: `postEnglish()` → XとBlusky両方に英語投稿
+
+**パターンB: 個別投稿（時間差制御）**
+- 毎日 JST 5:00: `postToXJapanese()`
+- 毎日 JST 7:00: `postToBlueskyJapanese()`
+- 毎日 JST 18:00: `postToXEnglish()`
+- 毎日 JST 20:00: `postToBlueskyEnglish()`
 
 ### コード構成
 

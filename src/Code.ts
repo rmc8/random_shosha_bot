@@ -251,15 +251,82 @@ function createBlueskySession(credentials: BlueskyCredentials): string | null {
   }
 }
 
+/**
+ * Generate OGP image URL directly from sentence data
+ */
+function generateOGPImageUrl(
+  sentenceText: string,
+  title: string,
+  author: string,
+  lang: Language
+): string {
+  const params = [
+    `sentence=${encodeURIComponent(sentenceText)}`,
+    `title=${encodeURIComponent(title)}`,
+    `author=${encodeURIComponent(author)}`,
+    `lang=${encodeURIComponent(lang)}`
+  ].join('&');
+
+  const ogpUrl = `https://rmc-8.com/api/og-shosha?${params}`;
+  Logger.log(`Generated OGP image URL: ${ogpUrl}`);
+  return ogpUrl;
+}
+
+/**
+ * Upload blob to Bluesky
+ */
+function uploadBlobToBluesky(
+  imageUrl: string,
+  accessJwt: string
+): any | null {
+  try {
+    // Download image
+    const imageResponse = UrlFetchApp.fetch(imageUrl, { muteHttpExceptions: true });
+    const imageBlob = imageResponse.getBlob();
+    const mimeType = imageBlob.getContentType() || 'image/jpeg';
+
+    Logger.log(`Downloading image: ${imageUrl}, MIME: ${mimeType}`);
+
+    // Upload to Bluesky
+    const uploadUrl = `${BLUESKY_API_BASE}/com.atproto.repo.uploadBlob`;
+
+    const options: GoogleAppsScript.URL_Fetch.URLFetchRequestOptions = {
+      method: 'post',
+      headers: {
+        'Content-Type': mimeType,
+        Authorization: `Bearer ${accessJwt}`,
+      },
+      payload: imageBlob.getBytes(),
+      muteHttpExceptions: true,
+    };
+
+    const uploadResponse = UrlFetchApp.fetch(uploadUrl, options);
+    const uploadCode = uploadResponse.getResponseCode();
+
+    if (uploadCode === 200) {
+      const data = JSON.parse(uploadResponse.getContentText());
+      Logger.log(`Blob uploaded successfully: ${JSON.stringify(data.blob)}`);
+      return data.blob;
+    } else {
+      Logger.log(`Blob upload failed (${uploadCode}): ${uploadResponse.getContentText()}`);
+      return null;
+    }
+  } catch (error) {
+    Logger.log(`Blob upload error: ${error}`);
+    return null;
+  }
+}
+
 function extractFacets(text: string): Array<{
   index: { byteStart: number; byteEnd: number };
-  features: Array<{ $type: string; uri: string }>;
+  features: Array<any>;
 }> {
   const facets: Array<{
     index: { byteStart: number; byteEnd: number };
-    features: Array<{ $type: string; uri: string }>;
+    features: Array<any>;
   }> = [];
 
+  // Detect URLs
   const urlRegex = /https?:\/\/[^\s]+/g;
   let match: RegExpExecArray | null;
 
@@ -279,6 +346,27 @@ function extractFacets(text: string): Array<{
     });
   }
 
+  // Detect hashtags
+  const hashtagRegex = /#[\w_]+/g;
+  hashtagRegex.lastIndex = 0; // Reset regex state
+
+  while ((match = hashtagRegex.exec(text)) !== null) {
+    const hashtag = match[0];
+    const tag = hashtag.substring(1); // Remove # from tag value
+    const byteStart = Utilities.newBlob(text.substring(0, match.index)).getBytes().length;
+    const byteEnd = byteStart + Utilities.newBlob(hashtag).getBytes().length;
+
+    facets.push({
+      index: { byteStart, byteEnd },
+      features: [
+        {
+          $type: 'app.bsky.richtext.facet#tag',
+          tag: tag,
+        },
+      ],
+    });
+  }
+
   return facets;
 }
 
@@ -287,7 +375,8 @@ function postToBluesky(
   credentials: BlueskyCredentials,
   shareUrl?: string,
   ogpTitle?: string,
-  ogpDescription?: string
+  ogpDescription?: string,
+  ogpImageUrl?: string
 ): boolean {
   const accessJwt = createBlueskySession(credentials);
 
@@ -310,16 +399,29 @@ function postToBluesky(
     };
 
     if (shareUrl) {
+      const externalData: any = {
+        uri: shareUrl,
+        title: ogpTitle || 'Random Shosha - 書写のお題',
+        description: ogpDescription || '古典文学の一文を書写のお題として',
+      };
+
+      // Upload OGP image as thumbnail
+      if (ogpImageUrl) {
+        const blob = uploadBlobToBluesky(ogpImageUrl, accessJwt);
+        if (blob) {
+          externalData.thumb = blob;
+          Logger.log('OGP thumbnail uploaded successfully');
+        }
+      }
+
       record.embed = {
         $type: 'app.bsky.embed.external',
-        external: {
-          uri: shareUrl,
-          title: ogpTitle || 'Random Shosha - 書写のお題',
-          description: ogpDescription || '古典文学の一文を書写のお題として',
-        },
+        external: externalData,
       };
-      Logger.log(`Adding OGP card for URL: ${shareUrl}`);
+      Logger.log(`Adding OGP card - URL: ${shareUrl}, Title: ${ogpTitle}`);
     }
+
+    Logger.log(`Bluesky post record: ${JSON.stringify(record)}`);
 
     const payload = {
       repo: credentials.identifier,
@@ -449,13 +551,22 @@ function postToBlueskyJapanese(): void {
 
     Logger.log(`Post text: ${shareContent.text}`);
 
+    // Generate OGP image URL from sentence data
+    const ogpImageUrl = generateOGPImageUrl(
+      data.sentence_text,
+      data.title,
+      data.author,
+      'ja'
+    );
+
     const blueskyCredentials = getBlueskyCredentials();
     const blueskyResult = postToBluesky(
       shareContent.text,
       blueskyCredentials,
       shareContent.url,
       'Random Shosha - 書写のお題',
-      '古典文学の一文を書写のお題として'
+      '古典文学の一文を書写のお題として',
+      ogpImageUrl
     );
     Logger.log(`Bluesky post result: ${blueskyResult ? 'Success' : 'Failed'}`);
 
@@ -478,18 +589,115 @@ function postToBlueskyEnglish(): void {
 
     Logger.log(`Post text: ${shareContent.text}`);
 
+    // Generate OGP image URL from sentence data
+    const ogpImageUrl = generateOGPImageUrl(
+      data.sentence_text,
+      data.title,
+      data.author,
+      'en'
+    );
+
     const blueskyCredentials = getBlueskyCredentials();
     const blueskyResult = postToBluesky(
       shareContent.text,
       blueskyCredentials,
       shareContent.url,
       'Random Shosha - Calligraphy Practice',
-      'Classic literature sentence for calligraphy practice'
+      'Classic literature sentence for calligraphy practice',
+      ogpImageUrl
     );
     Logger.log(`Bluesky post result: ${blueskyResult ? 'Success' : 'Failed'}`);
 
     Logger.log('=== English post to Bluesky completed ===');
   } catch (error) {
     Logger.log(`English post to Bluesky error: ${error}`);
+  }
+}
+
+// ============================================================================
+// Combined Posting Functions (Post to both X and Bluesky)
+// ============================================================================
+
+/**
+ * Post Japanese sentence to both X and Bluesky
+ * Trigger: Daily at JST 5:00 (or as needed)
+ */
+function postJapanese(): void {
+  Logger.log('=== Starting Japanese post to both X and Bluesky ===');
+
+  try {
+    const data = fetchJapaneseSentence();
+    const shareContent = generateJapaneseShareContent(data);
+
+    Logger.log(`Post text: ${shareContent.text}`);
+
+    // Post to X (Japanese account)
+    const xCredentials = getJapaneseXCredentials();
+    const xResult = postToX(shareContent.text, xCredentials);
+    Logger.log(`X post result: ${xResult ? 'Success' : 'Failed'}`);
+
+    // Post to Bluesky
+    const blueskyCredentials = getBlueskyCredentials();
+    const ogpImageUrl = generateOGPImageUrl(
+      data.sentence_text,
+      data.title,
+      data.author,
+      'ja'
+    );
+    const blueskyResult = postToBluesky(
+      shareContent.text,
+      blueskyCredentials,
+      shareContent.url,
+      'Random Shosha - 書写のお題',
+      '古典文学の一文を書写のお題として',
+      ogpImageUrl
+    );
+    Logger.log(`Bluesky post result: ${blueskyResult ? 'Success' : 'Failed'}`);
+
+    Logger.log('=== Japanese post to both platforms completed ===');
+  } catch (error) {
+    Logger.log(`Japanese post error: ${error}`);
+  }
+}
+
+/**
+ * Post English sentence to both X and Bluesky
+ * Trigger: Daily at NY time 5:00 (JST 18:00 or 19:00, or as needed)
+ */
+function postEnglish(): void {
+  Logger.log('=== Starting English post to both X and Bluesky ===');
+
+  try {
+    const data = fetchEnglishSentence();
+    const shareContent = generateEnglishShareContent(data);
+
+    Logger.log(`Post text: ${shareContent.text}`);
+
+    // Post to X (English account)
+    const xCredentials = getEnglishXCredentials();
+    const xResult = postToX(shareContent.text, xCredentials);
+    Logger.log(`X post result: ${xResult ? 'Success' : 'Failed'}`);
+
+    // Post to Bluesky
+    const blueskyCredentials = getBlueskyCredentials();
+    const ogpImageUrl = generateOGPImageUrl(
+      data.sentence_text,
+      data.title,
+      data.author,
+      'en'
+    );
+    const blueskyResult = postToBluesky(
+      shareContent.text,
+      blueskyCredentials,
+      shareContent.url,
+      'Random Shosha - Calligraphy Practice',
+      'Classic literature sentence for calligraphy practice',
+      ogpImageUrl
+    );
+    Logger.log(`Bluesky post result: ${blueskyResult ? 'Success' : 'Failed'}`);
+
+    Logger.log('=== English post to both platforms completed ===');
+  } catch (error) {
+    Logger.log(`English post error: ${error}`);
   }
 }

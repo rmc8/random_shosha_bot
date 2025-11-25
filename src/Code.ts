@@ -86,21 +86,22 @@ function generateShareUrl(bookId: string, sentenceId: number, lang: Language): s
   return `https://rmc-8.com/shosha/random_shosha/?book_id=${encodedBookId}&sentence_id=${sentenceId}`;
 }
 
-function generateHashtags(bookId: string, sentenceId: number): string {
+function generateHashtags(bookId: string, sentenceId: number, lang: Language): string {
   const cleanBookId = bookId.replace(/-/g, '');
-  return `#random_shosha #${cleanBookId}_${sentenceId}`;
+  const mainHashtag = lang === 'ja' ? '#ランダム書写' : '#random_shosha';
+  return `${mainHashtag} #${cleanBookId}_${sentenceId}`;
 }
 
 function generateJapaneseShareContent(data: JapaneseSentenceResponse): ShareContent {
   const shareUrl = generateShareUrl(data.book_id, data.sentence_id, 'ja');
-  const hashtags = generateHashtags(data.book_id, data.sentence_id);
+  const hashtags = generateHashtags(data.book_id, data.sentence_id, 'ja');
   const text = `『${data.title}』${data.author}著\n${hashtags}\n${shareUrl}`;
   return { text, url: shareUrl };
 }
 
 function generateEnglishShareContent(data: EnglishSentenceResponse): ShareContent {
   const shareUrl = generateShareUrl(data.book_id, data.sentence_id, 'en');
-  const hashtags = generateHashtags(data.book_id, data.sentence_id);
+  const hashtags = generateHashtags(data.book_id, data.sentence_id, 'en');
   const text = `"${data.title}" by ${data.author}\n${hashtags}\n${shareUrl}`;
   return { text, url: shareUrl };
 }
@@ -347,7 +348,7 @@ function extractFacets(text: string): Array<{
   }
 
   // Detect hashtags
-  const hashtagRegex = /#[\w_]+/g;
+  const hashtagRegex = /#[\p{L}\p{N}_]+/gu;
   hashtagRegex.lastIndex = 0; // Reset regex state
 
   while ((match = hashtagRegex.exec(text)) !== null) {

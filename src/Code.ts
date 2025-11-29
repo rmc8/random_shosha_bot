@@ -347,9 +347,9 @@ function extractFacets(text: string): Array<{
     });
   }
 
-  // Detect hashtags
-  const hashtagRegex = /#[\p{L}\p{N}_]+/gu;
-  hashtagRegex.lastIndex = 0; // Reset regex state
+  // Detect hashtags - Use explicit Unicode ranges for GAS compatibility
+  // Covers: ASCII letters/digits/underscore, Hiragana, Katakana, CJK Unified Ideographs
+  const hashtagRegex = /#[a-zA-Z0-9_\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]+/g;
 
   while ((match = hashtagRegex.exec(text)) !== null) {
     const hashtag = match[0];
